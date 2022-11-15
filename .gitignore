@@ -361,3 +361,4 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/src/HtmlConverter.Web/.local-chromium/Win64-970485/chrome-win
