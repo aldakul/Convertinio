@@ -1,4 +1,5 @@
-﻿using Hangfire;
+﻿using File = HtmlConverter.Domain.Models.File;
+using Hangfire;
 using HtmlConverter.Application.Common.Utils;
 using HtmlConverter.Application.FileConverter.Pdf;
 using HtmlConverter.Application.Interfaces;
@@ -7,17 +8,15 @@ using HtmlConverter.Domain.Models.enums;
 using Microsoft.AspNetCore.Http;
 using HtmlConverter.Application.Common.Exceptions;
 using Microsoft.EntityFrameworkCore;
-using System.Net.Mime;
-using HtmlConverter.Application.Common.Infrastructure;
 
 namespace HtmlConverter.Application.FileConverter
 {
     public class FileConverter : IFileConverter
     {
         private readonly IBackgroundJobClient _backgroundJobClient;
-        private readonly IBaseRepository<Domain.Models.File> _fileRepository;
+        private readonly IBaseRepository<File> _fileRepository;
         private readonly IFileStore _fileStore;
-        public FileConverter(IBackgroundJobClient backgroundJobClient, IBaseRepository<Domain.Models.File> fileRepository, IFileStore fileStore) =>
+        public FileConverter(IBackgroundJobClient backgroundJobClient, IBaseRepository<File> fileRepository, IFileStore fileStore) =>
             (_backgroundJobClient, _fileRepository, _fileStore) = (backgroundJobClient, fileRepository, fileStore);
 
         public async Task<string> Convert(IFormFile? file, FileFormat fileFormat)
@@ -29,22 +28,16 @@ namespace HtmlConverter.Application.FileConverter
             var fromFileFormatExtension = Path.GetExtension(fromFileFormatName);
 
             var fromFileFormat = FileExtensions.GetFileFormat(fromFileFormatExtension);
-
-            var result = GetConverter(fromFileFormat, fileFormat);
-            if (result is null)
-                throw new NullReferenceException();
+            
+            if (!(fromFileFormat == FileFormat.HTML &&
+                fileFormat == FileFormat.PDF))
+                throw new FormatException();
 
             var id = await _fileStore.UploadFile(file);
 
-            return result.Invoke(id);
-        }
+            var result = _backgroundJobClient.Enqueue<PdfConvertJob>(x => x.Convert(id));
 
-        private Func<int, string>? GetConverter(FileFormat fromFileFormat, FileFormat fileFormat)
-        {
-            if (!(fromFileFormat == FileFormat.HTML &&
-                  fileFormat == FileFormat.PDF))
-                throw new FormatException();
-            return id => _backgroundJobClient.Enqueue<PdfConvertJob>(x => x.Convert(id));
+            return result;
         }
 
         public async Task<OutputFile> GetResult(string jobId)
